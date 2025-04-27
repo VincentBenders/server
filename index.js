@@ -2,8 +2,8 @@ import express from "express";
 import { AzureChatOpenAI, AzureOpenAIEmbeddings } from "@langchain/openai";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import cors from "cors";
+import { FaissStore } from "@langchain/community/vectorstores/faiss";
 import {
   AIMessage,
   HumanMessage,
@@ -11,6 +11,7 @@ import {
 } from "@langchain/core/messages";
 
 const app = express();
+
 const model = new AzureChatOpenAI({ temperature: 0.2 });
 let Allmessages = [];
 let vectorStore
@@ -19,6 +20,8 @@ const embeddings = new AzureOpenAIEmbeddings({
   temperature: 0,
   azureOpenAIApiEmbeddingsDeploymentName: process.env.AZURE_EMBEDDING_DEPLOYMENT_NAME
 });
+
+vectorStore = await FaissStore.load("vectordatabase", embeddings);
 
 async function createVectorstore() {
   const loader = new TextLoader("roles.txt");
@@ -33,26 +36,35 @@ async function createVectorstore() {
     `Document split into ${splitDocs.length} chunks. Now saving into vector store`
   );
   
-  vectorStore = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
-  askQuestion()
+  // vectorStore = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
+  vectorStore = await FaissStore.fromDocuments(splitDocs, embeddings);
+  await vectorStore.save("./vectordatabase");
 }
 
-async function askQuestion(){
-  const relevantDocs = await vectorStore.similaritySearch("What is this document about?",3);
+async function askQuestion(question){
+  const relevantDocs = await vectorStore.similaritySearch(question,3);
   const context = relevantDocs.map(doc => doc.pageContent).join("\n\n");
   const response = await model.invoke([
       ["system", "Use the following context to answer the user's question. Only use information from the context."],
       ["user", `Context: ${context}\n\nQuestion: What is this document about?`]
   ]);
+  console.log('relevantDocs: ', relevantDocs); 
+  console.log('context: ', context); 
+  
   console.log("\nAnswer found:");
   console.log(response.content);
+  return response.content
 }
 
 app.use(cors());
 app.use(express.json());
 
-app.get("/test", async (req, res) => {
+app.get("/create", async (req, res) => {
   createVectorstore()
+  
+});
+app.get("/test", async (req, res) => {
+  askQuestion()
   
 });
 
@@ -66,23 +78,22 @@ app.post("/chat", async (req, res) => {
       "Content-Type": "application/json",
     },
   });
+ 
+  console.log(vectorStore)
 
   Allmessages.push(["user", question]);
   const message = [
     new SystemMessage(
-      `Your a fantasy dwarf that wil awnser the following question about Dota 2: ${question} but keep it short.`
+      `Your a fantasy dwarf that wil awnser the following question about Dota 2: ${question} but keep it short. If the question is about a role use the following data for information about the different possitions: ${askQuestion(question)}. you can use information from this webservice aswell: ${await response.json()}`
     ),
-    // new SystemMessage(await response.json()),
   ];
 
-  console.log(context);
 
   for (const { human, ai } of context) {
     message.push(new HumanMessage(human));
     message.push(new AIMessage(ai));
   }
 
-  // ???????? (zet AIMesage en HUmanMessage vanuit de history ook in message)
 
   message.push(new HumanMessage(question));
 
