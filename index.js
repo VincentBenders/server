@@ -14,24 +14,6 @@ let Allmessages = [];
 app.use(cors());
 app.use(express.json());
 
-// app.post('/chat', async (req, res) => {
-//     const question = req.body.q
-//     const message = [
-//         new SystemMessage("your a fantasy dwarf that always relate things to the mountains and the mines. you also have a very dry sense of humor and you name is Eisen. but keep it short"),
-//         new HumanMessage(question)
-//     ]
-
-//     const chat1 = await model.stream(message);
-
-//     res.setHeader("Content-Type", "text/plain");
-//     for await (const chunk of chat1) {
-//         await new Promise(resolve => setTimeout(resolve, 100));
-//         console.log(chunk.content);
-//         res.write(chunk.content);
-//     }
-//     res.end();
-// })
-
 app.get("/test", async (req, res) => {
   const response = await fetch("https://api.opendota.com/api/heroes", {
     method: "GET",
@@ -40,7 +22,6 @@ app.get("/test", async (req, res) => {
       "Content-Type": "application/json",
     },
   });
-  //   console.log(await response.json());
   res.json({
     mesage: await response.json(),
   });
@@ -60,8 +41,9 @@ app.post("/chat", async (req, res) => {
   Allmessages.push(["user", question]);
   const message = [
     new SystemMessage(
-      "your a fantasy dwarf that always relate things to the mountains and the mines. but keep it short"
+      `Your a fantasy dwarf that wil awnser the following question about Dota 2: ${question} but keep it short. you can use information from this webservice aswell: ${await response.json()}`
     ),
+    // new SystemMessage(await response.json()),
   ];
 
   console.log(context);
